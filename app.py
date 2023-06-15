@@ -1,10 +1,12 @@
 from flask import Flask, request
 from config import Config
 from mysql import MySQL
+from flask_cors import CORS
 from formatters import format_db_user, format_db_pet, format_db_address, format_db_state, format_db_breed, format_db_status
-
+import requests
 
 app = Flask(__name__)
+CORS(app)
 
 # Obtener credentiales de base de datos
 credentials = Config ()
@@ -146,13 +148,13 @@ def put_usuario ():
     
     return {"ok": True}
     
-@app.delete("/usuario/")
-def delete_usuario ():
+@app.delete("/usuario/<int:id>/")
+def delete_usuario (id):
     """ Eliminar un usuario """ 
 
     # Obtener datos del requests
-    id = request.json.get("id", "") 
-        
+    #id = request.json.get("id", "") 
+
     if not id:
         return ({"error": "invalid or missing pramaters"}, 403)
 
@@ -273,12 +275,12 @@ def put_mascota ():
     
     return {"ok": True}
     
-@app.delete("/mascota/")
-def delete_mascota ():
+@app.delete("/mascota/<int:id>")
+def delete_mascota (id):
     """ Eliminar una mascota """
 
     # Obtener datos del requests
-    id = request.json.get("id", "") 
+    #id = request.json.get("id", "") 
         
     if not id:
         return ({"error": "invalid or missing pramaters"}, 403)
@@ -368,12 +370,12 @@ def put_direccion ():
     
     return {"ok": True}
     
-@app.delete("/direccion/")
-def delete_direccion (): 
+@app.delete("/direccion/<int:id>/")
+def delete_direccion (id): 
     """ Eliminar una direccion """
 
     # Obtener datos del requests
-    id = request.json.get("id", "") 
+    #id = request.json.get("id", "") 
         
     if not id:
         return ({"error": "invalid or missing pramaters"}, 403)
@@ -472,4 +474,4 @@ def get_status ():
     return status_list
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(port="3000", host="0.0.0.0", debug=True)
