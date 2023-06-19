@@ -1,5 +1,5 @@
 {
-    "db_server": "192.168.100.114",
+    "db_server": "192.168.43.144",
     "db_name": "findur",
     "db_user": "clusteradmin", 
     "db_password": "Sade_1740"
