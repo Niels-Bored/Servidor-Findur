@@ -3,7 +3,17 @@ from config import Config
 from mysql import MySQL
 from flask_cors import CORS
 from formatters import format_db_user, format_db_pet, format_db_address, format_db_state, format_db_breed, format_db_status
-import requests
+from email_manager.sender import EmailManager
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+EMAIL=os.getenv('EMAIL')
+PASSWORD=os.getenv('PASSWORD')
+
+EMAIL_MANAGER = EmailManager(EMAIL, PASSWORD)
+
 
 app = Flask(__name__)
 CORS(app)
@@ -79,14 +89,15 @@ def post_usuario ():
     direccion = request.json.get("direccion", "")
     status_conectado = request.json.get("status_conectado", "") 
     
-    if not id or not nombre or not apellido_p or not apellido_m or not telefono or not email or not password or not direccion or not status_conectado:
+    if not id or not nombre or not apellido_p or not apellido_m or not telefono or not email or not password or not direccion or status_conectado=="":
         return ({"error": "invalid or missing pramaters"}, 403)
 
     # Verificar si usuario existe
     usuarios = database.run_sql (f"SELECT * FROM usuario WHERE id = {id}")
     if usuarios:
         # Actualizar usuario
-        sql = f"UPDATE usuario SET nombre = '{nombre}', apellido_p = '{apellido_p}', apellido_m = '{apellido_m}', telefono = '{telefono}', email = '{email}', password = '{password}' direccion = '{direccion}', status_conectado = '{status_conectado}' WHERE id = {id}"
+        sql = f"UPDATE usuario SET nombre = '{nombre}', apellido_p = '{apellido_p}', apellido_m = '{apellido_m}', telefono = '{telefono}', email = '{email}', password = '{password}', direccion = {direccion}, status_conectado = {status_conectado} WHERE id = {id}"
+        print(sql)
         database.run_sql (sql)
         
         return {"ok": True}
@@ -112,8 +123,27 @@ def login ():
         return {"ok": True,"id": usuario[0]}
 
     else:
-        return ({"error": f"invalid credentials"}, 403)   
+        return ({"error": f"Invalid credentials"}, 403)   
 
+@app.post("/sendmail/")
+def sendmail ():   
+    """ Login de usuario """ 
+    
+    # Obtener datos del requests
+    mail = request.json.get("mail", "") 
+    body = request.json.get("body", "")
+    
+    if not mail or not body:
+        return ({"error": "invalid or missing pramaters"}, 403)
+
+    try:
+        EMAIL_MANAGER.send_email([mail], 'Someone tried to contact you', body)
+    except Exception as error: 
+        print(error)
+        return ({"error": error}, 500)  
+    else: 
+        return {"ok": True}
+       
 
 @app.put("/usuario/")
 def put_usuario (): 
@@ -129,7 +159,7 @@ def put_usuario ():
     direccion = request.json.get("direccion", "")
     status_conectado = request.json.get("status_conectado", "") 
     
-    if not id or not nombre or not apellido_p or not apellido_m or not telefono or not email or not password or not direccion or not status_conectado:
+    if not nombre or not apellido_p or not apellido_m or not telefono or not email or not password or not direccion or not status_conectado:
         return ({"error": "invalid or missing pramaters"}, 403)
 
 
@@ -143,10 +173,18 @@ def put_usuario ():
                 password, 
                 direccion, 
                 status_conectado) 
-            VALUES ('{nombre}','{apellido_p}','{apellido_m}',{telefono},{email},'{password}',{direccion},{status_conectado})"""
+            VALUES ('{nombre}','{apellido_p}','{apellido_m}',{telefono},'{email}','{password}',{direccion},{status_conectado})"""
+    print(sql)
     database.run_sql (sql)
     
-    return {"ok": True}
+    usuarios = database.run_sql (f"SELECT * FROM usuario WHERE nombre = '{nombre}' AND email = '{email}'")
+    if usuarios:
+        id = usuarios[0]
+        print(id)
+        return {"ok": True,"id": id[0]}
+
+    else:
+        return ({"error": f"there was an error on the insertion"}, 403)   
     
 @app.delete("/usuario/<int:id>/")
 def delete_usuario (id):
@@ -213,6 +251,31 @@ def get_mascota (id):
     else:
         return ({"error": "pet not found"}, 403)
 
+@app.get("/mascota/usuario/<int:id>")
+def get_mascotas_usuario (id):
+    """ Obetener mascotas de un usuario por id """
+    
+    # Obtener offset
+    offset = int(request.args.get ("offset", 0)) 
+    
+    # Inicializar lista vacía de mascotas
+    mascotas_list = []
+    
+    # Consultar información de base de datos
+    mascotas = database.run_sql (f"SELECT * FROM mascota WHERE id_usuario = {id}")
+    
+    # Filtrar datos en base al offset
+    mascotas = mascotas[offset:offset+20]
+    
+    # Recorrer cada masctoa para convertirlo a un diccionario / objetos
+    for mascota in mascotas: 
+        
+        # obtener y guardar usuario
+        mascotas_list.append (format_db_pet (mascota))
+    
+    # Retornar arreglo de objetos de mascotas
+    return mascotas_list
+
 @app.post("/mascota/")
 def post_mascota ():   
     """ Actualizar una mascota """ 
@@ -223,19 +286,18 @@ def post_mascota ():
     id_raza = request.json.get("id_raza", "") 
     color = request.json.get("color", "")
     descripcion = request.json.get("descripcion", "")
-    nacimiento = request.json.get("nacimiento", "")  
     genero = request.json.get("genero", "")
     id_status = request.json.get("id_status", "")
     id_usuario = request.json.get("id_usuario", "") 
     
-    if not id or not nombre or not id_raza or not color or not descripcion or not nacimiento or not genero or not id_status or not id_usuario:
+    if not id or not nombre or not id_raza or not color or not descripcion or not genero or not id_status or not id_usuario:
         return ({"error": "invalid or missing pramaters"}, 403)
 
     # Verificar si mascota existe
     usuarios = database.run_sql (f"SELECT * FROM mascota WHERE id = {id}")
     if usuarios:
         # Actualizar mascota
-        sql = f"UPDATE mascota SET nombre = '{nombre}', apellido_p = '{id_raza}', apellido_m = '{color}', telefono = '{descripcion}', email = '{nacimiento}', password = '{genero}' direccion = '{id_status}', status_conectado = '{id_usuario}' WHERE id = {id}"
+        sql = f"UPDATE mascota SET nombre = '{nombre}', id_raza = '{id_raza}', color = '{color}', descripcion = '{descripcion}', genero = '{genero}', id_status = '{id_status}', id_usuario = '{id_usuario}' WHERE id = {id}"
         database.run_sql (sql)
         
         return {"ok": True}
@@ -260,6 +322,7 @@ def put_mascota ():
     if not nombre or not id_raza or not color or not descripcion or not nacimiento or not genero or not id_status or not id_usuario:
         return ({"error": "invalid or missing pramaters"}, 403)
 
+    print(nacimiento)
     # Insertar mascota en base de datos
     sql = f"""INSERT INTO mascota (
                 nombre, 
@@ -270,10 +333,17 @@ def put_mascota ():
                 genero, 
                 id_status, 
                 id_usuario) 
-            VALUES ('{nombre}','{id_raza}','{color}',{descripcion},{nacimiento},'{genero}',{id_status},{id_usuario})"""
+            VALUES ('{nombre}','{id_raza}','{color}','{descripcion}','{nacimiento}','{genero}',{id_status},{id_usuario})"""
     database.run_sql (sql)
     
-    return {"ok": True}
+    mascotas = database.run_sql (f"SELECT * FROM mascota WHERE nombre = '{nombre}' AND nacimiento = '{nacimiento}'")
+    if mascotas:
+        id = mascotas[0]
+        print(id)
+        return {"ok": True,"id": id[0]}
+
+    else:
+        return ({"error": f"there was an error on the insertion"}, 403)
     
 @app.delete("/mascota/<int:id>")
 def delete_mascota (id):
@@ -296,7 +366,7 @@ def delete_mascota (id):
 
 ###################################DIRECCION################################################
 
-@app.get("/direccion/<int:id>")
+@app.get("/direccion/<int:id>/")
 def get_direccion (id):
     """ Obetener direccion por id """
     
@@ -365,10 +435,17 @@ def put_direccion ():
                 num_exterior,
                 codigo_postal, 
                 id_estado) 
-            VALUES ('{calle}','{colonia}','{num_interior}',{num_exterior},{codigo_postal},'{id_estado}'"""
+            VALUES ('{calle}','{colonia}','{num_interior}',{num_exterior},{codigo_postal},'{id_estado}')"""
     database.run_sql (sql)
-    
-    return {"ok": True}
+
+    direcciones = database.run_sql (f"SELECT * FROM direccion WHERE calle = '{calle}' AND colonia = '{colonia}'")
+    if direcciones:
+        id = direcciones[0]
+        print(id)
+        return {"ok": True,"id": id[0]}
+
+    else:
+        return ({"error": f"there was an error on the insertion"}, 403)   
     
 @app.delete("/direccion/<int:id>/")
 def delete_direccion (id): 
